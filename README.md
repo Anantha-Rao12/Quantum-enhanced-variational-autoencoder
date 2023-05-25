@@ -23,7 +23,22 @@ A new directory called `qiskitml-env` will be created.
 
 You are ready to start experiemnting with the code!
 
-## Example notebooks
+## Execution
+
+For the sake of simplicity and quick execution, we have a `QeVAEWrapper()` class that implements a QeVAE with default parameters. The model can be initialized, trained, and samples can be generated as shown in the notebook `How to Train a QeVAE.ipynb`. The three main steps are: 
+
+1. Creating the dataloaders : `dataloaders, dataloader_info = setup_dataloaders(dataset, want_datasetsize=1, train_size=0.75)`
+
+2. Creating and fitting the mode: 
+```
+qevae = QeVAEWrapper(num_qubits=2, latentsize=1)
+qevae.fit(traindataloader, validdataloader, original_results=dataset_dict)
+```
+
+3. Finally, after training, we can generate samples using `qevae.sample()`
+
+
+### Example notebooks
 
 Under the `Notebooks` directory, we have two notebooks that show how we train QeVAEs for two tasks: (1) Learning the distribution (2) Compressing the circuit. The respective notebooks are titled `4qubit_productstates_analysis.ipynb` and `Circuit_compilation_QeVAE.ipynb` contain more details on implementation.
 
