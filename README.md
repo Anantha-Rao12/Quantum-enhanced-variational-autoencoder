@@ -23,6 +23,10 @@ A new directory called `qiskitml-env` will be created.
 
 You are ready to start experiemnting with the code!
 
+## Example notebooks
+
+Under the `Notebooks` directory, we have two notebooks that show how we train QeVAEs for two tasks: (1) Learning the distribution (2) Compressing the circuit. The respective notebooks are titled `4qubit_productstates_analysis.ipynb` and `Circuit_compilation_QeVAE.ipynb` contain more details on implementation.
+
 ## Contact
 
 DM Anantha S Rao - [@anantharao00](https://twitter.com/anantharao00) <br>
