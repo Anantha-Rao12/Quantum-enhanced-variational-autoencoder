@@ -1,0 +1,8 @@
+2023_05_25-03_11_40_PM
+Date:Validation data goes here...
+Author:Anantha Rao
+0 tensor(0.9075) 
+1 tensor(0.9331) 
+2 tensor(0.9785) 
+3 tensor(1.0557) 
+4 tensor(1.1596) 

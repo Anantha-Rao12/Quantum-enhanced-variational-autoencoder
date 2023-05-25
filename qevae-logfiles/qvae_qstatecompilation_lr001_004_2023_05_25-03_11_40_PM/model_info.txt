@@ -1,0 +1,7 @@
+No of trainable parameters: 
+ (Model:119) | (Encoder:103) | (Decoder:16)
+Size of training set: 150 | Size of validation set: 50
+Total number of epochs: 5 | Total number of batches: 10
+Latent size: 1
+Batchsize: 16
+KL Term weight: 1.000000 ; Type: fixed

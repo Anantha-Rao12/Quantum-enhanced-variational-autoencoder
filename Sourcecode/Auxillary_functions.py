@@ -235,8 +235,6 @@ class Postprocessing():
             fidelity_evolution.append(self.get_bhattacoef(dist_after_epoch, orig_results)**2)
         return fidelity_evolution
  
-        
-
    
 class AutoPlotter():
 

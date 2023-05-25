@@ -9,14 +9,13 @@ from qiskit_machine_learning.neural_networks import CircuitQNN
 
 def create_qnn(num_inputs:int, num_qubits:int, qc_params:dict):
     """Creates the decoder circuit with ansatz. 
+    Parameters:
+    num_inputs (int) : size of the input vector that is embedded to the quantum circuit
+    num_qubits (int) : number of qubits in the circuit
+    qc_params (dict) : dictionary that specifies the feature map (currently only Pauli ZZ, Z, P), entanglement type and the number of repetiton layers.
 
-	Parameters:
-	num_inputs (int) : size of the input vector that is embedded to the quantum circuit
-	num_qubits (int) : number of qubits in the circuit
-	qc_params (dict) : dictionary that specifies the feature map (currently only Pauli ZZ, Z, P), entanglement type and the number of repetiton layers.
-
-	Returns:
-	A quantum neural network object, and the designed quantum circuit."""
+    Returns:
+    A quantum neural network object, and the designed quantum circuit."""
     
     if num_inputs > num_qubits:
         raise ValueError('Number of inputs is greater than the number of qubits... Not suitable with current feature map')
@@ -57,18 +56,21 @@ def create_qnn(num_inputs:int, num_qubits:int, qc_params:dict):
     )
     return qnn, qc
 
+#######################################################################
+# Create QeVAE model
+#######################################################################
 
-class QVAE_qcompile(torch.nn.Module):
-	"""
-	Create the hybrid quantum classical neural network
+class QeVAE_model(torch.nn.Module):
+    """
+    Create the hybrid quantum classical neural network
 
-	Parameters:
-	qnn : qiskit quantum neural network object
-	latent_dim (int) : Latent dimension of the model
+    Parameters:
+    qnn : qiskit quantum neural network object
+    latent_dim (int) : Latent dimension of the model
 
-	Returns:
-	A pytorch neural network object
-	"""
+    Returns:
+    A pytorch neural network object
+    """
 
     def __init__(self, qnn, latent_dim:int):
         super().__init__()

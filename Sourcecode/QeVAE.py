@@ -5,21 +5,144 @@ import datetime
 import numpy as np
 import torch
 
-from Auxillary_functions import MeasurementDataset, now, Decoder_distribution
-  
+from Auxillary_functions import MeasurementDataset, now, Decoder_distribution, AutoPlotter
+from Model_learndist import QeVAE_model
+
+import torch
+import qiskit
+from qiskit_machine_learning.connectors import TorchConnector
+from qiskit_machine_learning.neural_networks import CircuitQNN
+
+#######################################################################
+# Setup quantum circuit decoder
+#######################################################################
+
+def create_qnn(num_inputs:int, num_qubits:int, qc_params:dict):
+    """Creates the decoder circuit with ansatz. 
+    Parameters:
+    num_inputs (int) : size of the input vector that is embedded to the quantum circuit
+    num_qubits (int) : number of qubits in the circuit
+    qc_params (dict) : dictionary that specifies the feature map (currently only Pauli ZZ, Z, P), entanglement type and the number of repetiton layers.
+
+    Returns:
+    A quantum neural network object, and the designed quantum circuit."""
+    
+    if num_inputs > num_qubits:
+        raise ValueError('Number of inputs is greater than the number of qubits... Not suitable with current feature map')
+    
+    fm , entanglement_type, repititions = qc_params.values()
+    
+    if fm == 'ZZ':
+        feature_map = qiskit.circuit.library.ZZFeatureMap(num_inputs)
+    elif fm == 'Z':
+        feature_map = qiskit.circuit.library.ZFeatureMap(num_inputs)
+    elif fm == 'P':
+        feature_map = qiskit.circuit.library.PauliFeatureMap(num_inputs, reps=2, paulis=['X', 'Y'], insert_barriers=True)
+    else:
+        raise ValueError("Wrong feature Map provided!")
+
+    #local_entanglement = {}
+    ansatz = qiskit.circuit.library.TwoLocal(
+        num_qubits=num_qubits,
+        rotation_blocks=["ry", "rx"],
+        entanglement_blocks='cx',
+        skip_final_rotation_layer=False,
+        entanglement=entanglement_type,
+        reps=repititions, #1
+        insert_barriers=True,
+    )
+    qc = qiskit.QuantumCircuit(num_qubits)
+    qc.append(feature_map, range(0, num_inputs))
+    qc.h(range(num_inputs, num_qubits)) if num_inputs < num_qubits else None
+    qc.barrier()
+    qc.append(ansatz, range(num_qubits))
+    qnn = CircuitQNN(
+        qc,
+        input_params=feature_map.parameters,
+        weight_params=ansatz.parameters,
+        input_gradients=True,
+        sparse=False,
+        quantum_instance=qiskit.Aer.get_backend("qasm_simulator"),
+    )
+    return qnn, qc
+
+#######################################################################
+# Create QeVAE model
+#######################################################################
+
+class QeVAE_model(torch.nn.Module):
+    """
+    Create the hybrid quantum classical neural network
+
+    Parameters:
+    qnn : qiskit quantum neural network object
+    latent_dim (int) : Latent dimension of the model
+
+    Returns:
+    A pytorch neural network object
+    """
+
+    def __init__(self, qnn, latent_dim:int):
+        super().__init__()
+        self.encoder = torch.nn.Sequential(
+            torch.nn.Linear(qnn.circuit.num_qubits, 8),
+            torch.nn.LeakyReLU(0.01),
+            torch.nn.Linear(8, 7),
+            torch.nn.LeakyReLU(0.01)) 
+
+        self.z_mean = torch.nn.Linear(7,latent_dim)
+        self.z_log_var = torch.nn.Linear(7,latent_dim)
+
+        # self.preprocessor = torch.nn.Sequential(
+        #     torch.nn.Linear(latent_dim, qnn.circuit.num_qubits),
+        #     torch.nn.LeakyReLU(0.01))
+        
+        self.preprocessor = torch.nn.Linear(latent_dim, qnn.circuit.num_qubits)
+        torch.nn.init.normal_(self.preprocessor.weight, mean=0, std=0.01)
+        torch.nn.init.constant_(self.preprocessor.bias, val=0)
+            
+        self.decoder = TorchConnector(qnn)
+
+    def encoding_fn(self, x):
+        x = self.encoder(x)
+        z_mean, z_log_var = self.z_mean(x), self.z_log_var(x)
+        encoded = self.reparameterize(z_mean, z_log_var)
+        return encoded
+        
+    def decoding_fn(self, x):
+        x = self.preprocessor(x)
+        decoded = self.decoder(x)
+        return decoded
+        
+    def reparameterize(self, z_mu, z_log_var):
+        eps = torch.randn(z_mu.size(0), z_mu.size(1))
+        z = z_mu + eps * torch.exp(z_log_var/2.) 
+        return z
+        
+    def forward(self, x):
+        x = self.encoder(x)
+        z_mean, z_log_var = self.z_mean(x), self.z_log_var(x)
+        encoded = self.reparameterize(z_mean, z_log_var)
+        preprocessed = self.preprocessor(encoded)
+        decoded = self.decoder(preprocessed)
+        return encoded, z_mean, z_log_var, decoded #preprocessed
+    
+#######################################################################
+# Create QeVAE class
+#######################################################################
                 
 class QeVAE():
-	"""
-	Creates a QeVAE object that is ready for training. 
+    """
+    Creates a QeVAE object that is ready for training. 
 
-	Parameters:
-	training_params (dict) : patience factor, minibatchsize, beta, annealing schedule
-	dataloaders (dict) : Training and validation set pytorch dataloader objects
-	optimizers (dict) : Pytorch optimizers for the encoder and decoder
-	true_result_keys (list) : True distribution obtained from data
-	root_dir (str) : Directory where results are to be written
-	nn_type (str) : Type of the neural network (classical/quantum-classical)
-	"""
+    Parameters:
+    training_params (dict) : patience factor, minibatchsize, beta, annealing schedule
+    dataloaders (dict) : Training and validation set pytorch dataloader objects
+    optimizers (dict) : Pytorch optimizers for the encoder and decoder
+    true_result_keys (list) : True distribution obtained from data
+    root_dir (str) : Directory where results are to be written
+    nn_type (str) : Type of the neural network (classical/quantum-classical)
+    """
     
     def __init__(self, training_params:dict, dataloaders:list,
                 optimizers:list, true_result_keys:list, root_dir:str, nn_type:str):
@@ -126,7 +249,7 @@ class QeVAE():
         return trainparams_info, dataloader_info, epoch_batch_info, latentsize, batchsize_info, kl_term_weight
         
     def validation_loss(self, model, all_bitstrings):
-	"""Computes Validation loss using only the reconstruction term"""
+        """Computes Validation loss using only the reconstruction term"""
 
         output_qubits = model.encoder[0].in_features    
         total_val_loss = 0
@@ -148,18 +271,18 @@ class QeVAE():
             return total_val_loss/len(self.valid_dataloader)
 
             
-    def start_training(self, model, all_bitstrings:list, num_epochs:int, original_results:dict):
-	""" Starts training the QeVAE model and logs output of training after every minibatch
+    def train(self, model, all_bitstrings:list, num_epochs:int, original_results:dict):
+        """ Starts training the QeVAE model and logs output of training after every minibatch
 
-	Parameters:
-	model : Pytorch model 
-	all_bitstrings (list) : All 2^n bitstrings where n is the number of qubits
-	num_epochs (int) : Total number of epochs for training
-	original_results (dict) : True results from data including data and probability
+        Parameters:
+        model : Pytorch model 
+        all_bitstrings (list) : All 2^n bitstrings where n is the number of qubits
+        num_epochs (int) : Total number of epochs for training
+        original_results (dict) : True results from data including data and probability
 
-	Returns:
-	Trained mode, output directory path
-	"""
+        Returns:
+        Trained mode, output directory path
+        """
         
         output_qubits = model.encoder[0].in_features
         
@@ -311,3 +434,71 @@ class QeVAE():
                 
             else:
                 return self.get_kl_term_weight(epoch-30, num_epochs, schedule='linear')
+            
+
+class QeVAEWrapper(QeVAE):
+    """ Wrapper that helps to implement the QeVAE with a quantum decoder with default parameters. 
+    
+    Creates a simple QeVAE model"""
+    def __init__(self, num_qubits, latentsize):
+        
+        self.num_qubits = num_qubits
+        self.latentsize = latentsize
+        
+        # Set default values for other parameters
+        self.training_params = {"patience_factor": 5, "minibatchsize": 16,
+                                "beta": 1, "annealing": "fixed"}
+        
+        # set learning rates for encoder and decoder
+        self.encoder_lr = 0.001; self.decoder_lr = 0.004
+        
+        self.nn_type = "quantum-classical"
+        self.num_epochs = 5
+        self.all_bitstrings = [("{0:0%db}"%num_qubits).format(i) for i in range(pow(2, num_qubits))]
+        
+        root_dir = "qevae-logfiles"
+        if not os.path.exists(root_dir):
+            os.makedirs(root_dir)
+        self.root_directory = root_dir
+        
+        # Create model
+        qnn, qc = create_qnn(num_inputs=self.num_qubits, num_qubits=self.num_qubits, qc_params= {'fm':'Z',
+                                                             'entanglement_type':'linear',
+                                                             'repititions':2})
+        self.model = QeVAE_model(qnn, self.latentsize)
+            
+        
+    def fit(self, traindataloader, validdataloader, original_results):
+        """Create optimizers, earlystopping instance and start training"""
+        
+        self.true_result_keys = original_results.keys()
+        
+        optimizer_encoder = torch.optim.Adam([i for i in list(self.model.parameters())[:-1]], lr=self.encoder_lr)
+        optimizer_decoder = torch.optim.Adam([list(self.model.parameters())[-1]], lr=self.decoder_lr)
+        self.optimizers = [optimizer_encoder, optimizer_decoder]
+    
+    
+        self.qevae = QeVAE(self.training_params, [traindataloader, validdataloader],
+                           self.optimizers, self.true_result_keys,
+                           self.root_directory, self.nn_type) 
+        
+        model, directory_path = self.qevae.train(self.model, self.all_bitstrings, self.num_epochs, original_results)
+        print("Training completed...\nResults written to %s"%(directory_path))
+        
+        self.model = model 
+        self.log_drectory = directory_path
+
+    def save_plots(self, datafile):
+        
+        root_dir = os.path.dirname(self.log_drectory)
+        current_dir = self.log_drectory.split('/')[-1]
+        plotting_params = [self.num_qubits, datafile]
+        write_plots = AutoPlotter(root_dir, current_dir, self.qevae, plotting_params).write_plots()
+        
+    def sample(self):
+        """Generates a sample from the decoder"""
+        with torch.no_grad():
+            sample = torch.randn(self.model.z_mean.out_features)
+            output_sample = self.model.decoding_fn(sample)
+        
+        return output_sample

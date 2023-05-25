@@ -14,17 +14,18 @@ from Auxillary_functions import (
     get_dict_from_array,
     Postprocessing, decorate_plot, normalize, AutoPlotter
 )
-from Model_learndist import QVAE_qcompile, create_qnn
-from Training import QeVAE
+from Model_learndist import QeVAE_model, create_qnn
+from QeVAE import QeVAE
 
 
 #######################################################################
 # SETUP PLOTTERS AND DATALOADERS
 #######################################################################
  
-def setup_dataloaders(want_datasetsize:float, train_size:float, n_samples):
+def setup_dataloaders(datafile, want_datasetsize:float, train_size:float):
     """Creates training and validation dataloaders. Print the size of each dataset"""
 
+    n_samples = datafile.shape[0]
 #     want_datasetsize=0.1; train_size = 0.7
     training_dataset = MeasurementDataset(datafile[: int(want_datasetsize*train_size * n_samples)])
     valid_dataset = MeasurementDataset(datafile[int(want_datasetsize*train_size * n_samples) :int(want_datasetsize*n_samples)])
@@ -105,7 +106,7 @@ if __name__ == "__main__":
         true_results = get_dict_from_array(datafile)
         print("No of samples", n_samples)
 
-        dataloaders, dataloader_info = setup_dataloaders(want_datasetsize=0.2, train_size=0.75, n_samples=n_samples)
+        dataloaders, dataloader_info = setup_dataloaders(datafile, want_datasetsize=0.2, train_size=0.75, n_samples=n_samples)
 
         nqubits = datafile[0].shape[0]
         featuremap = sys.argv[2]
