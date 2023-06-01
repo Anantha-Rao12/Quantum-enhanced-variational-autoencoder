@@ -47,4 +47,4 @@ Under the `Notebooks` directory, we have two notebooks that show how we train Qe
 DM Anantha S Rao - [@anantharao00](https://twitter.com/anantharao00) <br>
 For clarifications and queries -- [Anantha Rao](mailto:aanantha.s.rao@gmail.com?subject=[QeVAE2023]) @2023
 
-Project Link: [https://github.com/AnanthaRao-12/Decoding-Quantum-States-with-NMR](https://github.com/Anantha-Rao12/Quantum-enhanced-variational-autoencoder)
+Project Link: [https://github.com/AnanthaRao-12/Quantum-enhanced-variational-autoencoder](https://github.com/Anantha-Rao12/Quantum-enhanced-variational-autoencoder)
